@@ -244,8 +244,6 @@ class SetupGithubPages:
                         flag_create = False
 
             print("\n[## Create Docker Container]")
-            print("  src : " + self._src)
-            print("  site: " + self._output_dir)
             if flag_create is True:
                 ret, _result = self.get_process(
                     ['docker', 'run', '-dit',
@@ -260,6 +258,8 @@ class SetupGithubPages:
                      "/bin/bash"
                      ])
                 if ret == 0:
+                    print("  src : " + self._src)
+                    print("  site: " + self._output_dir)
                     print("  --> Create Docker container: "
                           + self._container_name)
             else:
