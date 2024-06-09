@@ -2,6 +2,38 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "python debug : build : clone_again",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/build.py",
+            "console": "integratedTerminal",
+            "args": [
+                "${config:project.server.INPUT_FILE}",
+                "--clone_again"
+            ]
+        },
+        {
+            "name": "python debug : build : remake imager",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/build.py",
+            "console": "integratedTerminal",
+            "args": [
+                "${config:project.server.INPUT_FILE}",
+                "--remake_image"
+            ]
+        },
+        {
+            "name": "python debug : build : build",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/build.py",
+            "console": "integratedTerminal",
+            "args": [
+                "${config:project.server.INPUT_FILE}"
+            ]
+        },
+        {
             "name": "python debug : server : setup",
             "type": "debugpy",
             "request": "launch",

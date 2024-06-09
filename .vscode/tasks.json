@@ -2,6 +2,40 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "build : [00] clone_again",
+            "type": "shell",
+            "command": "${workspaceFolder}/build.py",
+            "args": [
+                "${config:project.server.INPUT_FILE}",
+                "--clone_again"
+            ]
+        },
+        {
+            "label": "build : [01] remake image",
+            "type": "shell",
+            "command": "${workspaceFolder}/build.py",
+            "args": [
+                "${config:project.server.INPUT_FILE}",
+                "--remake_image"
+            ]
+        },
+        {
+            "label": "build : [02] build",
+            "type": "shell",
+            "command": "${workspaceFolder}/build.py",
+            "args": [
+                "${config:project.server.INPUT_FILE}"
+            ]
+        },
+        {
+            "label": "build : help ",
+            "type": "shell",
+            "command": "${workspaceFolder}/build.py",
+            "args": [
+                "--help"
+            ]
+        },
+        {
             "label": "server : [00] remake image",
             "type": "shell",
             "command": "${workspaceFolder}/server.py",
@@ -29,7 +63,15 @@
             "group": {
                 "kind": "build",
                 "isDefault": true // Ctrl + Shift + B
-            },
+            }
+        },
+        {
+            "label": "server : help",
+            "type": "shell",
+            "command": "${workspaceFolder}/server.py",
+            "args": [
+                "--help"
+            ]
         }
     ]
 }

@@ -13,46 +13,57 @@ import os
 import argparse
 import shutil
 import subprocess
+import time
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 parser = argparse.ArgumentParser(
     description="Setup Github-Pages on a local machine with Docker"
 )
 parser.add_argument("-v", "--version", action="version",
                     version="%(prog)s ver." + __version__)
+parser.add_argument("INPUT_DIR", help="Build target directory")
 
+# Settings: jekyll-build-pages
 parser.add_argument("--url", type=str, default="https://github.com/actions/jekyll-build-pages.git",
                     help="URL where jekyll-build-pages can be downloaded")
 parser.add_argument("--branch", type=str, default="v1.0.12",
                     help="Branch name of jekyll-build-pages")
+parser.add_argument("--download_dir", type=str, default=".build",
+                    help="Download directory")
 
+# Settings: Docker
+# ## Please check ruby version: https://pages.github.com/versions/
 parser.add_argument("--image_name", type=str, default="github_pages_build_image",
                     help="Docker image name")
 parser.add_argument("--image_version", type=str, default="latest",
                     help="Docker image version")
-# https://pages.github.com/versions/
-parser.add_argument("--image_option_ruby_version", type=str, default="2.7.4",
+parser.add_argument("--image_option_ruby_version", type=str, default="3.1.6",
                     help="Ruby version")
 parser.add_argument("--container_name", type=str, default="build_jekyll",
                     help="Docker container name")
 parser.add_argument("--dockerfile_name", type=str, default="Dockerfile",
                     help="Dockerfile name")
-parser.add_argument("--gemfile_path", type=str, default="test/.build/Gemfile",
-                    help="Gemfile path")
+parser.add_argument("--entrypoint_name", type=str, default="entrypoint.sh",
+                    help="entrypoint name")
 
-parser.add_argument("--src", type=str, default="docs", help="Build directory")
+# Settings: default
 parser.add_argument("--root_dir", type=str,
-                    default=os.path.abspath(os.path.join(
-                        os.path.dirname(__file__), "./..")),
+                    default=os.path.abspath(os.path.dirname(__file__)),
                     help="Root directory")
-parser.add_argument("--download_dir", type=str, default="test/.build",
-                    help="Download directory")
+
+# Settings: jekyll
+parser.add_argument("--gemfile_path", type=str, default=".build/Gemfile",
+                    help="Gemfile path")
 parser.add_argument("--volume_site", type=str, default="_site",
                     help="Folder where build results are stored")
+
+# Options : Control tools
 parser.add_argument("--clone_again", action='store_true',
                     help="Execute a git clone again")
 parser.add_argument("--remake_image", action='store_true',
                     help="Remake Docker image")
+parser.add_argument("--wait_logs", type=int, default=6,
+                    help="Wait before displaying docker logs")
 
 
 class SetupGithubPages:
@@ -61,10 +72,11 @@ class SetupGithubPages:
 
     _root_dir = "."
     _download_dir = "."
-    _src = "docs"
+    _src = "."
     _volume_site = "_site"
-    _gemfile_path = "test/Gemfile"
+    _gemfile_path = ".build/Gemfile"
     _dockerfile_path = "Dockerfile"
+    _entrypoint_name = "entrypoint.sh"
     _remake_image = False
     _image_name = "github_pages_build_image"
     _image_version = "latest"
@@ -72,6 +84,7 @@ class SetupGithubPages:
     _branch = "v1.0.12"
     _image_option_ruby_version = "2.7.4"
     _container_name = "build_jekyll"
+    _wait_logs = 6
     _clone_again = False
 
     def _set_args(self, ap):
@@ -79,16 +92,16 @@ class SetupGithubPages:
         self._download_dir = os.path.abspath(
             os.path.join(ap.root_dir, ap.download_dir))
         self._src = os.path.abspath(
-            os.path.join(ap.root_dir, ap.src))
+            os.path.join(ap.root_dir, ap.INPUT_DIR))
         self._volume_site = os.path.abspath(
             os.path.join(ap.root_dir, ap.volume_site))
         self._gemfile_path = os.path.abspath(
             os.path.join(ap.root_dir, ap.gemfile_path))
         self._dockerfile_path = os.path.abspath(
             os.path.join(self._download_dir, ap.dockerfile_name))
+        self._entrypoint_name = os.path.abspath(
+            os.path.join(self._download_dir, ap.entrypoint_name))
         self._remake_image = ap.remake_image
-        if ap.clone_again is True:
-            self._remake_image = True
         self._image_name = ap.image_name
         self._image_version = ap.image_version
         self._url = ap.url
@@ -96,6 +109,10 @@ class SetupGithubPages:
         self._clone_again = ap.clone_again
         self._image_option_ruby_version = ap.image_option_ruby_version
         self._container_name = ap.container_name
+        self._wait_logs = ap.wait_logs
+
+        if self._clone_again is True:
+            self._remake_image = True
 
         self._flag_init = True
 
@@ -103,7 +120,6 @@ class SetupGithubPages:
         """Initialize the class."""
         # =========================================================
         self._set_args(ap)
-        # =========================================================
 
         # =========================================================
         # If there are any containers using the image, delete them.
@@ -128,13 +144,17 @@ class SetupGithubPages:
             ret = self.create_docker_container()
 
         # =========================================================
-        # self.print_container_list()
-        # self.print_docker_logs(ap.container_name)
+        if ret == 0:
+            self.wait_logs()
+            self.print_docker_logs()
+        # =========================================================
+        # if ret == 0:
+        #     self.stop_container()
         # =========================================================
 
     def download_jekyll_build_pages(self):
         """Download jekyll-build-pages."""
-        print("[## Download jekyll-build-pages]")
+        print("\n[## Download jekyll-build-pages]")
         ret = 1
         if self._flag_init is True:
             ret = 0
@@ -150,15 +170,52 @@ class SetupGithubPages:
                     _flag_download = False
 
             if _flag_download is True:
-                # Clone the repository
-                ret, result = self.get_process(['git', 'clone', '--quiet',
-                                                '--no-progress', self._url,
-                                                '--branch', self._branch, self._download_dir])
+                # check and change autocrlf
+                flag_autocrlf = "false"
+                ret, result = self.get_process(
+                    ['git', 'config', '--global', 'core.autocrlf'])
+                if ret == 0 and result != "":
+                    flag_autocrlf = result.rstrip('\n')
+                print("  --> git config core.autocrlf " + flag_autocrlf)
+                ret, result = self.get_process(
+                    ['git', 'config', '--global', 'core.autocrlf', "input"])
                 if ret == 0:
-                    print("  --> Get clone " + self._url
-                          + "(" + self._branch + ")")
-                else:
-                    print("  [ERROR] " + result)
+                    print("  --> git config core.autocrlf input")
+
+                    # Clone the repository
+                    ret, result = self.get_process(['git', 'clone', '--quiet',
+                                                    '--no-progress', self._url,
+                                                    '--branch', self._branch, self._download_dir])
+                    if ret == 0:
+                        print("  --> Get clone " + self._url
+                              + "(" + self._branch + ")")
+                    else:
+                        print("  [ERROR] " + result)
+                _ret, _result = self.get_process(
+                    ['git', 'config', '--global', 'core.autocrlf', flag_autocrlf])
+                _ret, result = self.get_process(
+                    ['git', 'config', '--global', 'core.autocrlf'])
+                if _ret == 0 and result != "":
+                    print("  --> git config core.autocrlf " + result.rstrip('\n'))
+
+        return ret
+
+    def stop_container(self):
+        """Stop Docker container."""
+        ret = 1
+        if self._flag_init is True:
+            ret, result = self.get_process(['docker', 'ps', '--format', '"{{.Names}}"',
+                                            '--filter', 'name=' + self._container_name])
+            if ret == 0:
+                for item in result.splitlines():
+                    if item == "":
+                        continue
+                    ret, _result2 = self.get_process(
+                        ['docker', 'stop', item])
+                    if ret == 0:
+                        print("  --> Stop container: " + item)
+        if ret != 0:
+            print("  [ERROR] Failed container stop")
         return ret
 
     def start_container(self):
@@ -181,7 +238,7 @@ class SetupGithubPages:
         """Remove Docker container."""
         ret = 1
         if self._flag_init is True:
-            print("[## Remove a container]")
+            print("\n[## Remove a container]")
             # ================================
             # If there are any containers using the image, delete them.
             ret, result = self.get_process(['docker', 'ps', '-a', '--format', '"{{.Names}}"',
@@ -201,7 +258,7 @@ class SetupGithubPages:
         """Remove Docker image."""
         ret = 1
         if self._flag_init is True:
-            print("[## Remove a docker image]")
+            print("\n[## Remove a docker image]")
             ret, result = self.get_process(
                 ['docker', 'images', '-q', self._image_name + ':' + self._image_version])
             if result != "":
@@ -218,7 +275,8 @@ class SetupGithubPages:
         """Build Docker Image."""
         ret = 1
         if self._flag_init is True:
-            print("[## Create a Docker image]")
+            print("\n[## Create a Docker image]")
+            print("  dir: " + self._download_dir)
             ret, result = self.get_process(
                 ['docker', 'images', '-q', self._image_name + ':' + self._image_version])
             if ret == 0 and result == "":
@@ -258,13 +316,14 @@ class SetupGithubPages:
                         flag_create = False
 
             if flag_create is True:
-                print("[## Create Docker Container]")
+                print("\n[## Create Docker Container]")
                 ret, _result = self.get_process(
                     ['docker', 'run', '-dit',
                      '--name', self._container_name,
                      '--hostname', self._container_name,
-                     '--rm',
+                     # '--rm',
                      '-v', self._gemfile_path + ":/root/src/Gemfile",
+                     # '-v', self._entrypoint_name + ":/entrypoint.sh",
                      '-v', self._src + ":/root/src",
                      '-v', self._volume_site + ":/root/_site",
                      '-e', "GITHUB_WORKSPACE=/root",
@@ -281,8 +340,8 @@ class SetupGithubPages:
                 if ret == 0:
                     print("  --> Create Docker container: "
                           + self._container_name)
-                    print("        src:         " + self._src)
-                    print("        volume_site: " + self._volume_site)
+                    print("        src : " + self._src)
+                    print("        site: " + self._volume_site)
             else:
                 print("  --> Already exists container: " + self._container_name)
                 ret = self.start_container()
@@ -290,15 +349,15 @@ class SetupGithubPages:
                 print("  [ERROR] Not create Docker container")
         return ret
 
-    def print_docker_logs(self, container_name: str):
+    def print_docker_logs(self):
         """Print Docker Logs."""
-        print("[## docker logs]")
-        ret = os.system('docker logs ' + container_name)
+        print("\n[## docker logs]")
+        ret = os.system('docker logs ' + self._container_name)
         return ret
 
     def print_container_list(self):
         """Print Docker Container"""
-        print("[## Container list] ")
+        print("\n[## Container list] ")
         ret, result = self.get_process(
             ['docker', 'ps', '-a', '--format', '"{{.Names}} : {{.Status}}"'])
         if ret == 0:
@@ -340,6 +399,18 @@ class SetupGithubPages:
             return proc.returncode, stdout
         except ImportError as e:
             return 1, str(e)
+
+    def wait_logs(self):
+        """Wait for a while."""
+        print("\n[## Wait: " + str(self._wait_logs) + " sec]")
+        _next_line_max = 30
+        for _i in range(self._wait_logs):
+            time.sleep(1)
+            if _i % _next_line_max == (_next_line_max - 1):
+                print(".")
+            else:
+                print("", end='.')
+        print("")
 
 
 if __name__ == "__main__":

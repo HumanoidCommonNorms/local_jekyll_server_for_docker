@@ -18,10 +18,8 @@ __version__ = "0.0.2"
 parser = argparse.ArgumentParser(
     description="Setup Github-Pages on a local machine with Docker."
 )
-# default values
 parser.add_argument("-v", "--version", action="version",
                     version="%(prog)s ver." + __version__)
-
 parser.add_argument("INPUT_DIR", help="Build target directory")
 
 # options : Docker
@@ -57,56 +55,67 @@ parser.add_argument("--wait_logs", type=int, default=6,
 
 class SetupGithubPages:
     """Setup Github-Pages on a local machine with Docker."""
-    _root_dir = "."
-    _src = ""
+    _flag_init = False
+
+    _root_dir = os.path.dirname(__file__)
+    _src = "."
+    _image_name = "github_pages_server_image"
+    _image_version = "latest"
+    _container_name = "server_jekyll"
+    _port = 8000
     _output_dir = "_site"
     _dockerfile_path = "data/Dockerfile"
     _node_dir = "data/node"
-    _remake_container_only = False
+    _jekyll_dir = "data/jekyll"
     _setup = False
+    _remake_container_only = False
+    _wait_logs = 6
+
+    def _set_args(self, ap):
+        self._root_dir = os.path.abspath(ap.root_dir)
+        self._src = os.path.abspath(
+            os.path.join(ap.root_dir, ap.INPUT_DIR))
+        self._image_name = ap.image_name
+        self._image_version = ap.image_version
+        self._container_name = ap.container_name
+        self._port = ap.port
+        self._output_dir = os.path.abspath(
+            os.path.join(ap.root_dir, ap.output_dir))
+        self._dockerfile_path = os.path.abspath(
+            os.path.join(ap.root_dir, ap.dockerfile_path))
+        self._node_dir = os.path.abspath(
+            os.path.join(ap.root_dir, ap.node_dir))
+        self._jekyll_dir = os.path.abspath(
+            os.path.join(ap.root_dir, ap.jekyll_dir))
+        self._setup = ap.setup
+        self._remake_container_only = ap.remake_container_only
+        self._wait_logs = ap.wait_logs
+        if self._remake_container_only is True:
+            self._setup = True
+        self._flag_init = True
 
     def __init__(self, ap):
         """Initialize the class."""
         # =========================================================
-        self._root_dir = os.path.abspath(ap.root_dir)
-        self._src = os.path.abspath(
-            os.path.join(ap.root_dir, ap.INPUT_DIR))
-        self._dockerfile_path = os.path.abspath(
-            os.path.join(ap.root_dir, ap.dockerfile_path))
-        self._output_dir = os.path.abspath(
-            os.path.join(ap.root_dir, ap.output_dir))
-        self._jekyll_dir = os.path.abspath(
-            os.path.join(ap.root_dir, ap.jekyll_dir))
-        self._node_dir = os.path.abspath(
-            os.path.join(ap.root_dir, ap.node_dir))
-        self._remake_container_only = ap.remake_container_only
-        self._setup = ap.setup
-        if self._remake_container_only is True:
-            self._setup = True
+        self._set_args(ap)
 
         # =========================================================
-        ret = self.stop_container(ap.container_name)
+        ret = self.stop_container()
         if self._setup is True:
             # If there are any containers using the image, delete them.
-            ret = self.remove_container(ap.image_name, ap.image_version)
+            ret = self.remove_container()
 
             # If there is an image with the same name, delete it.
             if self._remake_container_only is False and ret == 0:
-                ret = self.remove_image(ap.image_name, ap.image_version)
+                ret = self.remove_image()
 
         if ret == 0:
             # build docker image
-            ret = self.build_docker_image(self._root_dir, self._jekyll_dir,
-                                          self._dockerfile_path,
-                                          ap.image_name, ap.image_version)
+            ret = self.build_docker_image()
 
         if ret == 0:
             # create docker container
-            ret = self.create_docker_container(ap.image_name, ap.image_version,
-                                               ap.container_name,
-                                               ap.port, self._src,
-                                               self._output_dir,
-                                               self._node_dir)
+            ret = self.create_docker_container()
 
         # =========================================================
         if ret == 0:
@@ -114,6 +123,151 @@ class SetupGithubPages:
             self.print_docker_logs(ap.container_name)
         self.print_container_list()
         # =========================================================
+
+    def stop_container(self):
+        """Stop Docker container."""
+        ret = 1
+        if self._flag_init is True:
+            ret, result = self.get_process(['docker', 'ps', '--format', '"{{.Names}}"',
+                                            '--filter', 'name=' + self._container_name])
+            if ret == 0:
+                for item in result.splitlines():
+                    if item == "":
+                        continue
+                    ret, _result2 = self.get_process(
+                        ['docker', 'stop', item])
+                    if ret == 0:
+                        print("  --> Stop container: " + item)
+        if ret != 0:
+            print("  [ERROR] Failed container stop")
+        return ret
+
+    def start_container(self):
+        """Start Docker container."""
+        ret = 1
+        if self._flag_init is True:
+            ret, result = self.get_process(['docker', 'ps', '-a', '--format', '"{{.Names}}"',
+                                            '--filter', 'name=' + self._container_name])
+            if ret == 0:
+                for item in result.splitlines():
+                    if item == "":
+                        continue
+                    if item == self._container_name:
+                        ret, _result2 = self.get_process(
+                            ['docker', 'start', item])
+                        if ret == 0:
+                            print("  --> Start container: " + item)
+        if ret != 0:
+            print("  [ERROR] Failed container Start :" + self._container_name)
+        return ret
+
+    def remove_container(self):
+        """Remove Docker container."""
+        ret = 1
+        if self._flag_init is True:
+            print("[\n## Remove a container]")
+            # ================================
+            # If there are any containers using the image, delete them.
+            ret, result = self.get_process(['docker', 'ps', '-a', '--format', '"{{.Names}}"',
+                                            '--filter', 'ancestor='
+                                            + self._image_name + ':' + self._image_version])
+            if ret == 0:
+                for container_name in result.splitlines():
+                    if container_name == "":
+                        continue
+                    ret2, _result2 = self.get_process(
+                        ['docker', 'rm', '-f', container_name])
+                    print(
+                        "  --> Remove container: " + container_name + "(" + str(ret2) + ")")
+            else:
+                print("  [ERROR] Don't call docker ps")
+        return ret
+
+    def remove_image(self):
+        """Remove Docker image."""
+        ret = 1
+        if self._flag_init is True:
+            print("\n[## Remove a docker image]")
+            ret, result = self.get_process(
+                ['docker', 'images', '-q', self._image_name + ':' + self._image_version])
+            if ret == 0:
+                if result != "":
+                    ret, result_rmi = self.get_process(
+                        ['docker', 'rmi', self._image_name + ':' + self._image_version])
+                    if ret == 0:
+                        print(result_rmi)
+                        print(
+                            "  --> Remove image: " + self._image_name + ':' + self._image_version)
+            if ret != 0:
+                print("  [ERROR] Don't remove a Docker image")
+        return ret
+
+    def build_docker_image(self):
+        """Build Docker Image."""
+        ret = 1
+        if self._flag_init is True:
+            print("\n[## Create a Docker image]")
+            ret, result = self.get_process(
+                ['docker', 'images', '-q', self._image_name + ':' + self._image_version])
+            if ret == 0:
+                if result == "":
+                    os.chdir(self._jekyll_dir)
+                    ret = os.system('docker build'
+                                    # ' --no-cache'
+                                    # + ' --build-arg RUBY_VERSION=' + ruby_version
+                                    + ' -t ' + self._image_name + ':' + self._image_version
+                                    + ' -f' + self._dockerfile_path
+                                    + " " + self._jekyll_dir)
+                    os.chdir(self._root_dir)
+                    if ret == 0:
+                        print("  --> Create image: "
+                              + self._image_name + ':' + self._image_version + "(" + str(ret) + ")")
+                else:
+                    print("  --> Already exists image: "
+                          + self._image_name + ':' + self._image_version)
+            if ret != 0:
+                print("  [ERROR] Not get Docker image")
+        return ret
+
+    def create_docker_container(self):
+        """Create Docker Container."""
+        ret = 1
+        if self._flag_init is True:
+            ret, result = self.get_process(['docker', 'ps', '-a', '--format', '"{{.Names}}"',
+                                            '--filter', 'name=' + self._container_name])
+            flag_create = True
+            if ret == 0:
+                for item in result.splitlines():
+                    if item == "":
+                        continue
+                    if item == self._container_name:
+                        flag_create = False
+
+            print("\n[## Create Docker Container]")
+            print("  src : " + self._src)
+            print("  site: " + self._output_dir)
+            if flag_create is True:
+                ret, _result = self.get_process(
+                    ['docker', 'run', '-dit',
+                     '--name', self._container_name,
+                     '--hostname', self._container_name,
+                     '--publish', str(self._port) + ":8000",
+                     '-v', self._node_dir + ":/root/node",
+                     '-v', self._src + ":/root/src",
+                     '-v', self._output_dir + ":/root/_site",
+                     '--workdir', "/root",
+                     self._image_name + ":" + self._image_version,
+                     "/bin/bash"
+                     ])
+                if ret == 0:
+                    print("  --> Create Docker container: "
+                          + self._container_name)
+            else:
+                print("  --> Already exists container: " + self._container_name)
+                ret = self.start_container()
+            if ret != 0:
+                print("  [ERROR] Not create Docker container")
+        return ret
 
     def wait_logs(self, wait_time_sec: int):
         """Wait for a while."""
@@ -127,155 +281,26 @@ class SetupGithubPages:
                 print("", end='.')
         print("")
 
-    def stop_container(self, container_name: str):
-        """Stop Docker container."""
-        ret, result = self.get_process(['docker', 'ps', '--format', '"{{.Names}}"',
-                                        '--filter', 'name=' + container_name])
-        if ret == 0:
-            for item in result.splitlines():
-                if item == "":
-                    continue
-                ret, _result2 = self.get_process(
-                    ['docker', 'stop', item])
-                if ret == 0:
-                    print("  --> Stop container: " + item)
-        if ret != 0:
-            print("  [ERROR] Failed container stop")
-        return ret
-
-    def start_container(self, container_name: str):
-        """Start Docker container."""
-        ret, result = self.get_process(['docker', 'ps', '-a', '--format', '"{{.Names}}"',
-                                        '--filter', 'name=' + container_name])
-        if ret == 0:
-            for item in result.splitlines():
-                if item == "":
-                    continue
-                if item == container_name:
-                    ret, _result2 = self.get_process(
-                        ['docker', 'start', item])
-                    if ret == 0:
-                        print("  --> Start container: " + item)
-        if ret != 0:
-            print("  [ERROR] Failed container Start :" + container_name)
-        return ret
-
-    def remove_container(self, image_name: str, image_version: str):
-        """Remove Docker container."""
-        print("[\n## Remove a container]")
-        # ================================
-        # If there are any containers using the image, delete them.
-        ret, result = self.get_process(['docker', 'ps', '-a', '--format', '"{{.Names}}"',
-                                        '--filter', 'ancestor=' + image_name + ':' + image_version])
-        if ret == 0:
-            for container_name in result.splitlines():
-                if container_name == "":
-                    continue
-                ret2, _result2 = self.get_process(
-                    ['docker', 'rm', '-f', container_name])
-                print(
-                    "  --> Remove container: " + container_name + "(" + str(ret2) + ")")
-        else:
-            print("  [ERROR] Don't call docker ps")
-        return ret
-
-    def remove_image(self, image_name: str, image_version: str):
-        """Remove Docker image."""
-        print("\n[## Remove a docker image]")
-        ret, result = self.get_process(
-            ['docker', 'images', '-q', image_name + ':' + image_version])
-        if ret == 0:
-            if result != "":
-                ret, result_rmi = self.get_process(
-                    ['docker', 'rmi', image_name + ':' + image_version])
-                if ret == 0:
-                    print(result_rmi)
-                    print(
-                        "  --> Remove image: " + image_name + ':' + image_version)
-        if ret != 0:
-            print("  [ERROR] Don't remove a Docker image")
-        return ret
-
-    def build_docker_image(self, root_dir: str, jekyll_dir: str, dockerfile_path: str,
-                           image_name: str, image_version):
-        """Build Docker Image."""
-        print("\n[## Create a Docker image]")
-        ret, result = self.get_process(
-            ['docker', 'images', '-q', image_name + ':' + image_version])
-        if ret == 0:
-            if result == "":
-                os.chdir(jekyll_dir)
-                ret = os.system('docker build'
-                                # ' --no-cache'
-                                # + ' --build-arg RUBY_VERSION=' + ruby_version
-                                + ' -t ' + image_name + ':' + image_version
-                                + ' -f' + dockerfile_path
-                                + " " + jekyll_dir)
-                os.chdir(root_dir)
-                if ret == 0:
-                    print("  --> Create image: "
-                          + image_name + ':' + image_version + "(" + str(ret) + ")")
-            else:
-                print("  --> Already exists image: "
-                      + image_name + ':' + image_version)
-        if ret != 0:
-            print("  [ERROR] Not get Docker image")
-        return ret
-
-    def create_docker_container(self, image_name: str, image_version: str,
-                                container_name: str, open_port: int,
-                                src: str, output_dir: str, node_dir: str):
-        """Create Docker Container."""
-        ret, result = self.get_process(['docker', 'ps', '-a', '--format', '"{{.Names}}"',
-                                        '--filter', 'name=' + container_name])
-        flag_create = True
-        if ret == 0:
-            for item in result.splitlines():
-                if item == "":
-                    continue
-                if item == container_name:
-                    flag_create = False
-
-        print("\n[## Create Docker Container]")
-        if flag_create is True:
-            ret, _result = self.get_process(
-                ['docker', 'run', '-dit',
-                 '--name', container_name,
-                 '--hostname', container_name,
-                 '--publish', str(open_port) + ":8000",
-                 '-v', node_dir + ":/root/node",
-                 '-v', src + ":/root/src",
-                 '-v', output_dir + ":/root/_site",
-                 '--workdir', "/root",
-                 image_name + ":" + image_version,
-                 "/bin/bash"
-                 ])
-            if ret == 0:
-                print("  --> Create Docker container: " + container_name)
-                print("        src : " + src)
-                print("        dst : " + output_dir)
-        else:
-            print("  --> Already exists container: " + container_name)
-            ret = self.start_container(container_name)
-        if ret != 0:
-            print("  [ERROR] Not create Docker container")
-        return ret
-
     def print_docker_logs(self, container_name: str):
         """Print Docker Logs."""
-        print("\n[## docker logs]")
-        ret = os.system('docker logs ' + container_name)
+        ret = 1
+        if self._flag_init is True:
+            print("\n[## docker logs]")
+            ret = os.system('docker logs ' + container_name)
         return ret
 
     def print_container_list(self):
         """Print Docker Container"""
-        print("\n[## Container list] ")
-        ret, result = self.get_process(
-            ['docker', 'ps', '-a', '--format', '"{{.Names}}\tState[{{.Status}}]\tProt:{{.Ports}}"'])
-        if ret == 0 and result != "":
-            print("--------------------------------------------------")
-            print(result)
-            print("--------------------------------------------------")
+        ret = 1
+        if self._flag_init is True:
+            print("\n[## Container list] ")
+            ret, result = self.get_process(
+                ['docker', 'ps', '-a',
+                 '--format', '"{{.Names}}\tState[{{.Status}}]\tProt:{{.Ports}}"'])
+            if ret == 0 and result != "":
+                print("--------------------------------------------------")
+                print(result)
+                print("--------------------------------------------------")
         return ret
 
     def process_run(self, cmd: str, work_dir: str = ""):
