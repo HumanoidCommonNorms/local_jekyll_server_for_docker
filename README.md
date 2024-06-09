@@ -1,0 +1,2 @@
+# local_jekyll_server_for_docker
+GitHup pagesで動作するjekyllをDockerでビルドするためのプロジェクトです。
