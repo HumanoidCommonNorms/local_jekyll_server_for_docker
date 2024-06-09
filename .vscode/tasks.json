@@ -1,0 +1,35 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "server : [00] remake image",
+            "type": "shell",
+            "command": "${workspaceFolder}/server.py",
+            "args": [
+                "${config:project.server.INPUT_FILE}",
+                "--setup"
+            ]
+        },
+        {
+            "label": "server : [01] remake container",
+            "type": "shell",
+            "command": "${workspaceFolder}/server.py",
+            "args": [
+                "${config:project.server.INPUT_FILE}",
+                "--remake_container_only"
+            ]
+        },
+        {
+            "label": "server : [02] reboot",
+            "type": "shell",
+            "command": "${workspaceFolder}/server.py",
+            "args": [
+                "${config:project.server.INPUT_FILE}"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true // Ctrl + Shift + B
+            },
+        }
+    ]
+}

@@ -1,0 +1,30 @@
+# https://jekyllrb.com/docs/configuration/
+# bundler install
+# bundle exec jekyll serve --config /root/src/_config.yml,/root/jekyll/_config_server.yml --host 172.17.0.2
+# bundle exec jekyll serve --config /root/jekyll/_config_server.yml --host 172.17.0.2
+# bundle exec jekyll serve  --no-watch --config /root/jekyll/_config_server.yml,/root/src/_config.yml --host 172.17.0.2
+
+source: /root/src
+destination: /root/_site
+exclude: [
+  "Gemfile",
+  "Gemfile.lock",
+  "node_modules",
+  "vendor/bundle/",
+  "vendor/cache/",
+  "vendor/gems/",
+  "vendor/ruby/"]
+#keep_files: [".git", ".svn"]
+encoding: "utf-8"
+markdown_ext: "markdown,mkdown,mkdn,mkd,md"
+port: 8000
+
+lsi: false
+safe: true
+incremental: true
+highlighter: rouge
+gist:
+  noscript: false
+kramdown:
+  math_engine: mathjax
+  syntax_highlighter: rouge
