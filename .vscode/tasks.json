@@ -50,7 +50,7 @@
             "command": "${workspaceFolder}/server.py",
             "args": [
                 "${config:project.server.INPUT_FILE}",
-                "--remake_container_only"
+                "--remake_container"
             ]
         },
         {

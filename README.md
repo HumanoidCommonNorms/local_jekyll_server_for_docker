@@ -13,8 +13,8 @@ server.py {ビルドしたいフォルダを指定してください}
 
 # Dockerイメージを作り直したい場合は、--setupをつけてください。
 server.py  {ビルドしたいフォルダを指定してください} --setup
-# Dockerコンテナを作り直したい場合は、--remake_container_onlyをつけてください。
-server.py  {ビルドしたいフォルダを指定してください} --remake_container_only
+# Dockerコンテナを作り直したい場合は、--remake_containerをつけてください。
+server.py  {ビルドしたいフォルダを指定してください} --remake_container
 ```
 
 その他のオプションは以下のコマンドで確認できます。

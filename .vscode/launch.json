@@ -52,7 +52,7 @@
             "console": "integratedTerminal",
             "args": [
                 "${config:project.server.INPUT_FILE}",
-                "--remake_container_only"
+                "--remake_container"
             ]
         },
         {

@@ -47,7 +47,7 @@ parser.add_argument("--jekyll_dir", type=str, default="data/jekyll",
 # options : Control tools
 parser.add_argument("--setup", action='store_true',
                     help="Restart the container")
-parser.add_argument("--remake_container_only", action='store_true',
+parser.add_argument("--remake_container", action='store_true',
                     help="Remake from container")
 parser.add_argument("--wait_logs", type=int, default=6,
                     help="Wait before displaying docker logs")
@@ -68,7 +68,7 @@ class SetupGithubPages:
     _node_dir = "data/node"
     _jekyll_dir = "data/jekyll"
     _setup = False
-    _remake_container_only = False
+    _remake_container = False
     _wait_logs = 6
 
     def _set_args(self, ap):
@@ -88,9 +88,9 @@ class SetupGithubPages:
         self._jekyll_dir = os.path.abspath(
             os.path.join(ap.root_dir, ap.jekyll_dir))
         self._setup = ap.setup
-        self._remake_container_only = ap.remake_container_only
+        self._remake_container = ap.remake_container
         self._wait_logs = ap.wait_logs
-        if self._remake_container_only is True:
+        if self._remake_container is True:
             self._setup = True
         self._flag_init = True
 
@@ -106,7 +106,7 @@ class SetupGithubPages:
             ret = self.remove_container()
 
             # If there is an image with the same name, delete it.
-            if self._remake_container_only is False and ret == 0:
+            if self._remake_container is False and ret == 0:
                 ret = self.remove_image()
 
         if ret == 0:
