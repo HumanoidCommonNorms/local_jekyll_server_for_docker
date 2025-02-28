@@ -16,7 +16,7 @@ if [ "$PRINT_SCRIPT" = "false" ]; then
         echo "Build time: $(TZ=UTC date -u +%Y-%m-%dT%H:%M:%SZ) UTC"
         if test -e "/root/_site/index.html";then
             #echo "Internal IP:$SERVER_IP"
-            echo "[INFO] Open this link in your browser: http://localhost:${SERVER_PORT}"
+            #echo "[INFO] Open this link in your browser: http://localhost:${SERVER_PORT}"
             echo "======================================================"
             bundle exec jekyll serve \
                 --no-watch \

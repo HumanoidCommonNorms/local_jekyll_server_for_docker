@@ -24,7 +24,7 @@ class JekyllServerOptions:
     image_name = "github_pages_server_image"
     image_version = "latest"
     container_name = "server_jekyll"
-    port = 8010
+    port = 8888
     output_dir = "_site"
     dockerfile_path = "data/Dockerfile"
     node_dir = "data/node"
@@ -132,6 +132,9 @@ class SetupGithubPages:
             self.print_docker_logs()
         self.print_container_list()
         # =========================================================
+        if ret == 0:
+            print("[INFO] Open this link in your browser: http://localhost:" + str(self._opt.port))
+            print("")
 
     def stop_container(self):
         """Stop Docker container."""
@@ -295,7 +298,7 @@ class SetupGithubPages:
 
     def print_docker_logs(self):
         """Print Docker Logs."""
-        ret = 1
+        ret = 0
         if self._opt.flag_init is True:
             print("\n[## docker logs]")
             ret = os.system('docker logs ' + self._opt.container_name)
@@ -308,9 +311,8 @@ class SetupGithubPages:
             print("\n[## Container list] ")
             ret, result = self.get_process(
                 ['docker', 'ps', '-a',
-                 '--format', '"{{.Names}}\tState[{{.Status}}]\tProt:{{.Ports}}"'])
+                 '--format', '"{{.Names}}\tState[{{.Status}}]\tPort:{{.Ports}}"'])
             if ret == 0 and result != "":
-                print("--------------------------------------------------")
                 print(result)
                 print("--------------------------------------------------")
         return ret
