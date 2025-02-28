@@ -1,7 +1,7 @@
 {
     "project": {
         "server": {
-            "INPUT_FILE": "${workspaceFolder}/src"
+            "INPUT_FILE": "${workspaceFolder}/sample"
         }
     }
 }
